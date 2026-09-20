@@ -238,8 +238,8 @@
       <svg width="22" height="22" viewBox="0 0 24 24" fill="none"><path d="M12 2L4 5v6c0 5 3.4 8.7 8 9 4.6-.3 8-4 8-9V5l-8-3z" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M9 12l2 2 4-4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
     </div>
     <div>
-      <h1>مدقق المتابعين</h1>
-      <p class="tagline">تقدير جودة متابعين حساب إنستغرام</p>
+      <h1>instagram تحليل</h1>
+      <p class="tagline">أفحص جودة حساب إنستغرام من خلال دبي فانز نتائج حقيقية</p>
     </div>
   </header>
 
@@ -387,13 +387,13 @@
 
     var signals = [];
     signals.push({
-      label: "صحة المشاركة",
+      label: "ري بوست المشاركة",
       detail: "ER " + er.toFixed(2) + "% · " + tier + "% (" + tierName(tier) + ") متوقع",
       score: clamp(Math.round(er / tier * 100), 0, 100), w: 0.28
     });
     if (typeof d.following === "number"){
       signals.push({
-        label: "نسبة المتابِعين/المتابَعين",
+        label: "نسبة المتابِعين/أتابع",
         detail: fmt(d.followers) + " متابع · " + fmt(d.following) + " متابَع",
         score: followRatioScore(d.followers / Math.max(d.following, 1)), w: 0.12
       });
@@ -410,7 +410,7 @@
     });
     if (typeof d.likesCv === "number"){
       signals.push({
-        label: "اتساق الأداء",
+        label: "الإعجابات",
         detail: "تباين الإعجابات بين آخر " + d.sampleSize + " منشورًا: " + Math.round(d.likesCv * 100) + "%",
         score: clamp(Math.round(100 - d.likesCv * 60), 20, 100), w: 0.15
       });
