@@ -134,11 +134,17 @@
 
   .profile-row{display:flex; align-items:center; gap:12px;}
   .avatar{
-    width:52px; height:52px; border-radius:50%; flex:none;
+    position:relative; overflow:hidden;
+    width:56px; height:56px; border-radius:50%; flex:none;
     background:linear-gradient(135deg, var(--accent), var(--accent-soft));
     color:#fff; display:flex; align-items:center; justify-content:center;
     font-family:'Cairo',sans-serif; font-weight:800; font-size:20px;
   }
+  .avatar img{
+    position:absolute; inset:0; width:100%; height:100%;
+    object-fit:cover; background:var(--surface-2);
+  }
+  .avatar img[hidden]{display:none;}
   .profile-meta{display:flex; flex-direction:column; gap:2px; flex:1; min-width:0;}
   .handle{font-weight:700; font-size:14.5px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; direction:ltr; text-align:right;}
   .followers-line{font-size:12.5px; color:var(--ink-dim);}
@@ -191,8 +197,35 @@
     background:var(--surface-2); border-radius:12px; border:1px solid var(--border);
   }
 
+  .stats{display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:10px; margin-top:22px;}
+  .stats[hidden]{display:none;}
+  .stat{
+    background:var(--surface-2); border-radius:14px; padding:14px 6px;
+    display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; text-align:center;
+  }
+  .stat b{font-family:'Space Grotesk',sans-serif; font-size:18px; font-weight:700; line-height:1.2;}
+  .stat span{font-size:12px; color:var(--ink-dim);}
+
+  .signals{margin-top:26px;}
+  .signals[hidden]{display:none;}
+  .signals h3{font-size:14.5px; font-weight:700; margin-bottom:4px;}
+  .sig-list{list-style:none; margin:0; padding:0;}
+  .sig{display:flex; align-items:center; gap:14px; padding:13px 0; border-top:1px solid var(--border);}
+  .sig-text{flex:1; min-width:0; display:flex; flex-direction:column; gap:3px;}
+  .sig-label{font-size:13.5px; font-weight:700;}
+  .sig-detail{font-size:12px; color:var(--ink-dim); line-height:1.6;}
+  .sig-meter{display:flex; align-items:center; gap:10px; flex:none; direction:ltr;}
+  .sig-score{font-size:14px; font-weight:600; min-width:24px; text-align:right;}
+  .sig-track{width:96px; height:8px; border-radius:999px; background:var(--surface-2); overflow:hidden; direction:rtl;}
+  .sig-fill{height:100%; border-radius:999px; transition:width .5s ease;}
+  .sig-fill.band-good{background:var(--good);}
+  .sig-fill.band-warn{background:var(--warn);}
+  .sig-fill.band-bad{background:var(--bad);}
+
   @media (max-width:420px){
     .score-hero{justify-content:center;}
+    .stats{grid-template-columns:repeat(2,minmax(0,1fr));}
+    .sig-track{width:72px;}
   }
 </style>
 </head>
@@ -231,7 +264,7 @@
 
   <section class="panel report-panel">
     <div class="profile-row">
-      <div class="avatar" id="avatarInitial">؟</div>
+      <div class="avatar"><span id="avatarInitial">؟</span><img id="avatarImg" alt="" referrerpolicy="no-referrer" hidden></div>
       <div class="profile-meta">
         <span class="handle" id="outHandle">—</span>
         <span class="followers-line"><span id="outFollowersLine" class="mono">—</span> متابع</span>
@@ -262,6 +295,18 @@
           <li><span class="dot dot-bad"></span> بوت / مزيف <b id="outBot" class="mono">—</b></li>
         </ul>
       </div>
+    </div>
+
+    <div class="stats" id="stats" hidden>
+      <div class="stat"><b id="statFollowers" class="mono">—</b><span>متابعون</span></div>
+      <div class="stat"><b id="statLikes" class="mono">—</b><span>متوسط الإعجابات</span></div>
+      <div class="stat"><b id="statComments" class="mono">—</b><span>متوسط التعليقات</span></div>
+      <div class="stat"><b id="statEr" class="mono">—</b><span>ER</span></div>
+    </div>
+
+    <div class="signals" id="signals" hidden>
+      <h3>تفصيل المؤشرات</h3>
+      <ul class="sig-list" id="sigList"></ul>
     </div>
 
     <p class="report-note" id="reportNote">أدخل رابط حساب إنستغرام احترافي (Business أو Creator) واضغط «تحليل الحساب».</p>
@@ -310,9 +355,22 @@
     if (followers < 1000000) return 1.5;
     return 1;
   }
+  function tierName(t){
+    if (t >= 8) return "نانو";
+    if (t >= 4) return "مايكرو";
+    if (t >= 2.5) return "متوسط";
+    if (t >= 1.5) return "كبير";
+    return "ميغا";
+  }
   function commentLikeScore(clr){
     if (clr <= 0) return 20;
     return clamp(Math.round(100 - Math.abs(clr - 3.5) * 12), 15, 100);
+  }
+  function followRatioScore(r){
+    if (r >= 10) return 95;
+    if (r >= 2) return Math.round(60 + (r - 2) / 8 * 35);
+    if (r >= 0.5) return Math.round(30 + (r - 0.5) / 1.5 * 30);
+    return 20;
   }
   function band(score){
     if (score >= 70) return "good";
@@ -322,16 +380,54 @@
 
   function estimate(d){
     var er = d.followers > 0 ? (d.avgLikes + d.avgComments) / d.followers * 100 : 0;
-    var engagement = clamp(Math.round(er / getTier(d.followers) * 100), 0, 100);
+    var tier = getTier(d.followers);
     var clr = d.avgLikes > 0 ? d.avgComments / d.avgLikes * 100 : 0;
-    var comments = commentLikeScore(clr);
-    var activity = clamp(Math.round(d.mediaCount / 300 * 100), 0, 100);
+    var profileCount = (d.profilePicture ? 1 : 0) + (d.name ? 1 : 0) + (d.hasBio ? 1 : 0) +
+                       (d.hasWebsite ? 1 : 0) + (d.mediaCount > 0 ? 1 : 0);
 
-    var quality = clamp(Math.round(engagement * 0.42 + comments * 0.33 + activity * 0.25), 0, 100);
+    var signals = [];
+    signals.push({
+      label: "صحة المشاركة",
+      detail: "ER " + er.toFixed(2) + "% · " + tier + "% (" + tierName(tier) + ") متوقع",
+      score: clamp(Math.round(er / tier * 100), 0, 100), w: 0.28
+    });
+    if (typeof d.following === "number"){
+      signals.push({
+        label: "نسبة المتابِعين/المتابَعين",
+        detail: fmt(d.followers) + " متابع · " + fmt(d.following) + " متابَع",
+        score: followRatioScore(d.followers / Math.max(d.following, 1)), w: 0.12
+      });
+    }
+    signals.push({
+      label: "نسبة التعليق إلى الإعجاب",
+      detail: clr.toFixed(1) + " تعليق لكل 100 إعجاب",
+      score: commentLikeScore(clr), w: 0.20
+    });
+    signals.push({
+      label: "نشاط النشر",
+      detail: fmt(d.mediaCount) + " منشور إجمالاً",
+      score: clamp(Math.round(d.mediaCount / 300 * 100), 0, 100), w: 0.15
+    });
+    if (typeof d.likesCv === "number"){
+      signals.push({
+        label: "اتساق الأداء",
+        detail: "تباين الإعجابات بين آخر " + d.sampleSize + " منشورًا: " + Math.round(d.likesCv * 100) + "%",
+        score: clamp(Math.round(100 - d.likesCv * 60), 20, 100), w: 0.15
+      });
+    }
+    signals.push({
+      label: "اكتمال الملف الشخصي",
+      detail: profileCount + " من 5 عناصر مكتملة",
+      score: profileCount * 20, w: 0.10
+    });
+
+    var sum = 0, wsum = 0;
+    for (var i = 0; i < signals.length; i++){ sum += signals[i].score * signals[i].w; wsum += signals[i].w; }
+    var quality = clamp(Math.round(sum / wsum), 0, 100);
     var risk = 100 - quality;
     var bot = clamp(Math.round(risk * 0.42), 0, 100);
     var sus = clamp(Math.round(risk * 0.33), 0, 100);
-    return { quality: quality, bot: bot, sus: sus, real: clamp(100 - bot - sus, 0, 100) };
+    return { quality: quality, bot: bot, sus: sus, real: clamp(100 - bot - sus, 0, 100), er: er, signals: signals };
   }
 
   /* ---------- العرض ---------- */
@@ -341,9 +437,27 @@
     el.hidden = !text;
   }
 
+  function make(tag, cls, text){
+    var n = document.createElement(tag);
+    if (cls) n.className = cls;
+    if (text !== undefined) n.textContent = text;
+    return n;
+  }
+
+  function setAvatar(url, initial){
+    var img = byId('avatarImg');
+    byId('avatarInitial').textContent = initial;
+    img.hidden = true;
+    img.removeAttribute('src');
+    if (!url || url.indexOf("https://") !== 0) return;
+    img.onload = function(){ img.hidden = false; };
+    img.onerror = function(){ img.hidden = true; };
+    img.src = url;
+  }
+
   function resetReport(note){
     byId('outHandle').textContent = "—";
-    byId('avatarInitial').textContent = "؟";
+    setAvatar(null, "؟");
     byId('outFollowersLine').textContent = "—";
     byId('outBadge').hidden = true;
     byId('outScore').textContent = "—";
@@ -356,12 +470,38 @@
     byId('outReal').textContent = "—";
     byId('outSus').textContent = "—";
     byId('outBot').textContent = "—";
+    byId('stats').hidden = true;
+    byId('signals').hidden = true;
+    byId('sigList').textContent = "";
     byId('reportNote').textContent = note || "أدخل رابط حساب إنستغرام احترافي (Business أو Creator) واضغط «تحليل الحساب».";
+  }
+
+  function renderSignals(list){
+    var ul = byId('sigList');
+    ul.textContent = "";
+    for (var i = 0; i < list.length; i++){
+      var s = list[i];
+      var li = make('li', 'sig');
+      var text = make('div', 'sig-text');
+      text.appendChild(make('span', 'sig-label', s.label));
+      text.appendChild(make('span', 'sig-detail', s.detail));
+      var meter = make('div', 'sig-meter');
+      meter.appendChild(make('span', 'sig-score mono', String(s.score)));
+      var track = make('div', 'sig-track');
+      var fill = make('div', 'sig-fill band-' + band(s.score));
+      fill.style.width = s.score + "%";
+      track.appendChild(fill);
+      meter.appendChild(track);
+      li.appendChild(text);
+      li.appendChild(meter);
+      ul.appendChild(li);
+    }
+    byId('signals').hidden = false;
   }
 
   function renderResult(d){
     byId('outHandle').textContent = "@" + d.handle;
-    byId('avatarInitial').textContent = (d.handle.charAt(0) || "؟").toUpperCase();
+    setAvatar(d.profilePicture, (d.handle.charAt(0) || "؟").toUpperCase());
     byId('outFollowersLine').textContent = fmt(d.followers);
 
     if (d.avgLikes === null || d.avgComments === null || d.sampleSize === 0){
@@ -395,6 +535,14 @@
     byId('outReal').textContent = e.real + "%";
     byId('outSus').textContent = e.sus + "%";
     byId('outBot').textContent = e.bot + "%";
+
+    byId('statFollowers').textContent = fmt(d.followers);
+    byId('statLikes').textContent = fmt(d.avgLikes);
+    byId('statComments').textContent = fmt(d.avgComments);
+    byId('statEr').textContent = e.er.toFixed(2) + "%";
+    byId('stats').hidden = false;
+
+    renderSignals(e.signals);
 
     byId('reportNote').textContent = "تقدير حسابي مبني على آخر " + d.sampleSize + " منشورًا وعدد المنشورات الكلي، وليس فحصًا لقائمة المتابعين نفسها.";
   }
